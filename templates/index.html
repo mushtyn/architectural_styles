@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ІСАВАС</title>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <script>
+    function switchTab(tabId) {
+      document.querySelectorAll('.tab-content').forEach(tab => tab.classList.add('hidden'));
+      document.getElementById(tabId).classList.remove('hidden');
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      // Prediction Handling
+      document.querySelector('#tab1 form').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const formData = new FormData(this);
+        fetch('/predict', { method: 'POST', body: formData })
+          .then(response => response.json())
+          .then(data => {
+            if (data.error) {
+              alert(data.error);
+              return;
+            }
+            document.getElementById('prediction').innerText = `Найбільш ймовірний стиль: ${data.prediction}`;
+            document.getElementById('confidence').innerText = `Ймовірність: ${data.confidence}`;
+            document.getElementById('conclusion').innerText = data.conclusion;
+            document.getElementById('style-info').innerText = `Опис стилю: ${data.style_info}`;
+            document.getElementById('result-image').src = data.image_path;
+            document.getElementById('result-section').classList.remove('hidden');
+
+            // Populate all probabilities table
+            const tableBody = document.getElementById('probabilities-table').getElementsByTagName('tbody')[0];
+            tableBody.innerHTML = '';
+            data.all_probabilities.forEach(([label, prob]) => {
+              const row = tableBody.insertRow();
+              row.insertCell(0).innerText = label;
+              row.insertCell(1).innerText = `${prob.toFixed(2)}%`;
+            });
+          })
+          .catch(error => console.error('Error:', error));
+      });
+
+      // Training Handling
+      document.querySelector('#tab2 form').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const formData = new FormData(this);
+        fetch('/train', { method: 'POST', body: formData })
+          .then(response => response.text())
+          .then(html => {
+            document.body.innerHTML = html;
+            switchTab('tab2');
+          })
+          .catch(error => console.error('Error:', error));
+      });
+
+      // Dataset Upload Handling
+      document.querySelector('#tab3 form').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const formData = new FormData(this);
+        fetch('/upload_dataset', { method: 'POST', body: formData })
+          .then(response => response.text())
+          .then(html => {
+            document.body.innerHTML = html;
+            switchTab('tab3');
+          })
+          .catch(error => console.error('Error:', error));
+      });
+
+      // Dataset Stats Handling
+      document.getElementById('stats-btn').addEventListener('click', function() {
+        fetch('/dataset_stats')
+          .then(response => response.json())
+          .then(data => {
+            if (data.error) {
+              document.getElementById('stats-result').innerText = data.error;
+            } else {
+              let result = `Загальна кількість зображень: ${data.total_images}\n`;
+              result += `Кількість класів: ${data.num_classes}\n`;
+              result += "Розподіл по класах:\n";
+              for (const [className, count] of Object.entries(data.class_counts)) {
+                result += `${className}: ${count}\n`;
+              }
+              document.getElementById('stats-result').innerText = result;
+            }
+          })
+          .catch(error => console.error('Error:', error));
+      });
+
+      // Dataset Balancing Handling
+      document.getElementById('balance-form').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const formData = new FormData(this);
+        fetch('/balance_dataset', { method: 'POST', body: formData })
+          .then(response => response.json())
+          .then(data => {
+            if (data.error) {
+              alert(data.error);
+            } else {
+              alert('Датасет успішно збалансовано!');
+              document.getElementById('stats-btn').click();
+            }
+          })
+          .catch(error => console.error('Error:', error));
+      });
+
+      // Evaluation Handling
+      document.querySelector('#tab4 form').addEventListener('submit', function(e) {
+        e.preventDefault();
+        fetch('/evaluate', { method: 'POST' })
+          .then(response => response.text())
+          .then(html => {
+            document.body.innerHTML = html;
+            switchTab('tab4');
+          })
+          .catch(error => console.error('Error:', error));
+      });
+    });
+  </script>
+</head>
+<body class="bg-gray-100 min-h-screen py-10">
+  <div class="max-w-5xl mx-auto bg-white p-6 rounded-lg shadow-lg">
+    <h1 class="text-3xl font-bold text-center mb-6">Інтелектуальна система визначення архітектурних стилів</h1>
+
+    <div class="flex justify-around mb-6 border-b">
+      <button onclick="switchTab('tab1')" class="py-2 px-4 hover:text-blue-500">1. Визначення архітектурних стилів за зображенням</button>
+      <button onclick="switchTab('tab2')" class="py-2 px-4 hover:text-blue-500">2. Навчання нейромережевої моделі</button>
+      <button onclick="switchTab('tab3')" class="py-2 px-4 hover:text-blue-500">3. Робота з датасетом </button>
+      <button onclick="switchTab('tab4')" class="py-2 px-4 hover:text-blue-500">4. Дослідження ефективності </button>
+    </div>
+
+    <div class="tab-content" id="tab1">
+      <h2 class="text-xl font-semibold mb-4">1. Розпізнавання архітектурного стилю</h2>
+      <form action="/predict" method="post" enctype="multipart/form-data">
+        <label class="block mb-2 text-sm font-medium text-gray-700">Завантажте фотографію</label>
+        <input type="file" name="file" class="mb-4 w-full px-3 py-2 border rounded" accept="image/*" required>
+        <button type="submit" class="w-full bg-blue-500 text-white py-2 rounded hover:bg-blue-600">Визначити стиль</button>
+      </form>
+
+      <div id="result-section" class="hidden mt-6">
+        <h3 class="text-lg font-bold mb-2">Результати класифікації</h3>
+        <p id="prediction"></p>
+        <p id="confidence"></p>
+        <p id="conclusion"></p>
+        <p id="style-info"></p>
+        <img id="result-image" class="w-full border rounded mt-2" alt="Результат зображення">
+        <h4 class="text-md font-semibold mt-4 mb-2">Ймовірності по всіх класах:</h4>
+        <table class="table-auto w-full text-left border" id="probabilities-table">
+          <thead>
+            <tr class="bg-gray-200">
+              <th class="px-4 py-2">Стиль</th>
+              <th class="px-4 py-2">Ймовірність</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="tab-content hidden" id="tab2">
+      <h2 class="text-xl font-semibold mb-4">2. Навчання моделі</h2>
+      <form action="/train" method="post">
+        <label class="block mb-2 text-sm font-medium text-gray-700">Кількість епох</label>
+        <input type="number" name="epochs" class="mb-4 w-full px-3 py-2 border rounded" min="1" max="100" value="10" required>
+        <label class="block mb-2 text-sm font-medium text-gray-700">Розмір батчу</label>
+        <input type="number" name="batch_size" class="mb-4 w-full px-3 py-2 border rounded" min="1" max="128" value="32" required>
+        <label class="block mb-2 text-sm font-medium text-gray-700">Кількість шарів для fine-tuning (0 для feature extraction)</label>
+        <input type="number" name="trainable_layers" class="mb-4 w-full px-3 py-2 border rounded" min="0" value="0" required>
+        <button type="submit" class="w-full bg-green-500 text-white py-2 rounded hover:bg-green-600">Почати навчання</button>
+      </form>
+      <div class="mt-6">
+        <h3 class="text-lg font-medium mb-2">Графік точності та втрат</h3>
+        <img src="/static/training_history.png" alt="Графік тренування" class="w-full border rounded">
+      </div>
+    </div>
+
+    <div class="tab-content hidden" id="tab3">
+      <h2 class="text-xl font-semibold mb-4">3. Робота з датасетом</h2>
+      <form action="/upload_dataset" method="post" enctype="multipart/form-data">
+        <label class="block mb-2 text-sm font-medium text-gray-700">Завантажити датасет (ZIP)</label>
+        <input type="file" name="dataset" class="mb-4 w-full px-3 py-2 border rounded" accept=".zip" required>
+        <button type="submit" class="w-full bg-yellow-500 text-white py-2 rounded hover:bg-yellow-600">Завантажити</button>
+      </form>
+      <button id="stats-btn" class="mt-4 bg-gray-500 text-white py-2 px-4 rounded hover:bg-gray-600">Отримати статистику</button>
+      <div id="stats-result" class="mt-4 text-gray-700"></div>
+      <form id="balance-form" class="mt-4">
+        <label class="block mb-2 text-sm font-medium text-gray-700">Цільова кількість зображень на клас (залиште порожнім для середнього)</label>
+        <input type="number" name="target_count" class="mb-4 w-full px-3 py-2 border rounded" min="1">
+        <button type="submit" class="w-full bg-yellow-500 text-white py-2 rounded hover:bg-yellow-600">Балансувати</button>
+      </form>
+    </div>
+
+    <div class="tab-content hidden" id="tab4">
+      <h2 class="text-xl font-semibold mb-4">4. Оцінка ефективності</h2>
+      <form action="/evaluate" method="post">
+        <p class="text-gray-700 mb-4">Обчислення точності, precision, recall, F1 та побудова матриці сплутування.</p>
+        <button type="submit" class="w-full bg-purple-500 text-white py-2 rounded hover:bg-purple-600">Оцінити модель</button>
+      </form>
+      <div class="mt-6">
+        <h3 class="text-lg font-medium mb-2">Графік точності та втрат</h3>
+        <img src="/static/training_history.png" alt="Графік тренування" class="w-full border rounded">
+        <h3 class="text-lg font-medium mb-2 mt-4">Матриця сплутування</h3>
+        <img src="/static/confusion_matrix.png" alt="Матриця сплутування" class="w-full border rounded">
+      </div>
+      {% if evaluation_report %}
+        <div class="bg-gray-100 mt-4 p-4 rounded">
+          <h3 class="text-lg font-medium mb-2">Результати оцінки</h3>
+          <pre class="text-sm text-gray-800">{{ evaluation_report }}</pre>
+        </div>
+      {% endif %}
+    </div>
+
+    {% if message %}
+      <div class="mt-6 bg-green-100 text-green-800 p-4 rounded">
+        {{ message }}
+      </div>
+    {% endif %}
+
+    {% if error %}
+      <div class="mt-6 bg-red-100 text-red-800 p-4 rounded">
+        {{ error }}
+      </div>
+    {% endif %}
+  </div>
+</body>
+</html>
